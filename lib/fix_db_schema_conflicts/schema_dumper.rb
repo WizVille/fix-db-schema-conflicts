@@ -26,6 +26,20 @@ module FixDBSchemaConflicts
       end
     end
 
+    def tables(stream)
+      specific = ENV['SCHEMA'] || if defined? ActiveRecord::Tasks::DatabaseTasks
+        File.join(ActiveRecord::Tasks::DatabaseTasks.db_dir, 'specific.rb')
+      else
+        "#{Rails.root}/db/specific.rb"
+      end
+
+      if File.exists?(specific)
+        stream.puts("\t" + File.read(specific).gsub("\n", "\n\t") + "\n\n")
+      end
+
+      super(stream)
+    end
+
     def table(*args)
       with_sorting do
         super(*args)
