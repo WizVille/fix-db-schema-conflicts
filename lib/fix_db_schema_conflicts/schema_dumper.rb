@@ -33,7 +33,7 @@ module FixDBSchemaConflicts
         "#{Rails.root}/db/specific.rb"
       end
 
-      if File.exists?(specific)
+      if File.exist?(specific)
         stream.puts("\t" + File.read(specific).gsub("\n", "\n\t") + "\n\n")
       end
 
