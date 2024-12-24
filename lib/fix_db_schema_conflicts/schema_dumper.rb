@@ -19,9 +19,9 @@ module FixDBSchemaConflicts
         __getobj__.indexes(table).sort_by(&:name)
       end
 
-      def triggers(trigger)
-        puts "triggers in class"
-        __getobj__.triggers(trigger).sort_by(&:name)
+      def triggers(table)
+        puts "called triggers"
+        __getobj__.triggers(table).sort_by(&:name)
       end
     end
 
@@ -45,29 +45,14 @@ module FixDBSchemaConflicts
       super(stream)
     end
 
-    def triggers(stream)
-      triggers = ENV['SCHEMA'] || if defined? ActiveRecord::Tasks::DatabaseTasks
-                                    File.join(ActiveRecord::Tasks::DatabaseTasks.db_dir, 'triggers.rb')
-                                  else
-                                    "#{Rails.root}/db/triggers.rb"
-                                  end
-
-      if File.exist?(triggers)
-        stream.puts("\t" + File.read(triggers).gsub("\n", "\n\t") + "\n\n")
-      end
-
-      super(stream)
-    end
-
     def table(*args)
       with_sorting do
         super(*args)
       end
     end
 
-    def trigger(*args)
-      puts "trigger"
-      puts args
+    def triggers(*args)
+      puts "main triggers"
       with_sorting do
         super(*args)
       end
