@@ -31,11 +31,14 @@ module FixDBSchemaConflicts
     private
 
     def add_triggers_in_file(file_name, trigger_content)
-      triggers_path = Rails.root.join('app', 'triggers')
+      triggers_path = Rails.root.join('db', 'triggers')
       FileUtils.mkdir_p triggers_path unless triggers_path.exist?
       file_path = triggers_path.join("#{file_name}.sql")
       File.open(file_path, "w") {} unless File.exist?(file_path)
       File.open(file_path, 'a') do |file|
+        trigger_content = trigger_content.gsub(/\n+/, "\n") # Remove extra blank lines
+                                         .gsub(/^\s+/m, '') # Trim leading spaces for each line
+                                         .strip # Remove leading/trailing blank lines
         formatted_sql = trigger_content.gsub(/(?=\b(AFTER|FOR EACH ROW|WHEN|EXECUTE FUNCTION)\b)/, "\n")
         file.write(formatted_sql + ";")
         file.puts
