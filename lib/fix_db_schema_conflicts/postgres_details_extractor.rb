@@ -105,7 +105,7 @@ module FixDBSchemaConflicts
       function_file_path = Rails.root.join('db', 'functions')
       file_name = function_file_path.join("#{file_name}.sql")
       FileUtils.mkdir_p function_file_path unless function_file_path.exist?
-      File.open(file_name, "w") {} unless File.exist?(file_name)
+      File.open(file_name, "w") {}
       File.open(file_name, 'a') do |file|
         function_content = function_content.gsub(/\n+/, "\n")
                                    .gsub(/^\s+/m, '')
@@ -121,7 +121,7 @@ module FixDBSchemaConflicts
       type_file_path = Rails.root.join('db', 'types')
       file_name = type_file_path.join("types.sql")
       FileUtils.mkdir_p type_file_path unless type_file_path.exist?
-      File.open(file_name, "w") {} unless File.exist?(file_name)
+      File.open(file_name, "w") {}
       File.open(file_name, 'a') do |file|
         type_content = type_content.gsub(/\n+/, "\n")
                                      .gsub(/^\s+/m, '')
