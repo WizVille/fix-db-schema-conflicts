@@ -11,6 +11,9 @@ module FixDBSchemaConflicts
     def triggers_creation(table_name, stream, *args)
       triggers = @connection.triggers(table_name)
       unless triggers.empty?
+        triggers.each do |trigger|
+          add_triggers_in_file(table_name, trigger.definition)
+        end
         stream.puts("\ttrigger_file = Rails.root.join('db', 'triggers', \"#{table_name}.sql\")")
         stream.puts("\tfile_content = File.read(trigger_file)")
         stream.puts("\texecute file_content")
