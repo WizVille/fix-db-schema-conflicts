@@ -7,50 +7,55 @@ module FixDBSchemaConflicts
       @pg_enum_types = @connection.fetch_enum_types
       @pg_functions = @connection.pg_functions
       @pg_fts_configurations = @connection.fts_configurations
+      type_file_path = Rails.root.join('db', 'others')
+      file_name = type_file_path.join("types.sql")
+      FileUtils.mkdir_p type_file_path unless type_file_path.exist?
+      File.open(file_name, "w") {}
+      fts_file_path = Rails.root.join('db', 'others', 'fts.sql')
+      File.open(fts_file_path, "w") {}
     end
 
     def create_types(stream)
-      stream.puts("  execute <<-SQL")
       @pg_enum_types.each do |enum|
         exttracted_values = extract_types_components(enum)
-        stream.puts exttracted_values
         types_in_file(exttracted_values)
       end
 
       if @pg_composite_types.present?
         @pg_composite_types.each do |composite|
           exttracted_values = extract_types_components(composite)
-          stream.puts extract_types_components(exttracted_values)
           types_in_file(exttracted_values)
         end
       end
-      stream.puts("  SQL")
+      stream.puts("\tfile = Rails.root.join('db', 'others', 'types.sql')")
+      stream.puts("\tfile_content = File.read(file)")
+      stream.puts("\texecute file_content")
     end
 
     def create_functions(stream)
       @pg_functions.each do |row|
         function_content, function_name = extract_function_components(row)
 
-        stream.write(<<~SQL)
-          execute <<~EOSQL
-            #{function_content}
-          EOSQL
-        SQL
+        stream.puts("\tfile = Rails.root.join('db', 'functions', \"#{function_name}.sql\")")
+        stream.puts("\tfile_content = File.read(file)")
+        stream.puts("\texecute file_content")
        functions_in_file(function_name, function_content)
       end
     end
 
     def create_fts_configurations(stream)
       unless @pg_fts_configurations.empty?
-        stream.puts("  execute <<-SQL")
         @pg_fts_configurations.each do |fts_configuration|
-          stream.puts "DO $$ BEGIN " \
+          sql_code = "DO $$ BEGIN " \
                         "IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = '#{fts_configuration.name}') THEN " \
                         "CREATE TEXT SEARCH CONFIGURATION #{fts_configuration.name} (COPY = simple); " \
                         "END IF; " \
                         "END $$;"
+          extract_fts_configurations(sql_code)
         end
-        stream.puts("  SQL")
+        stream.puts("\tfile = Rails.root.join('db', 'others', 'fts.sql')")
+        stream.puts("\tfile_content = File.read(file)")
+        stream.puts("\texecute file_content")
       end
     end
 
@@ -110,7 +115,7 @@ module FixDBSchemaConflicts
         function_content = function_content.gsub(/\n+/, "\n")
                                    .gsub(/^\s+/m, '')
                                    .strip
-        formatted_sql = function_content.gsub(/(?=\b(AS|BEGIN|END|LANGUAGE)\b)/, "\n")
+        formatted_sql = function_content.gsub(/(?=\b(BEGIN|END|LANGUAGE|SET|WHERE)\b)/, "\n")
         file.write(formatted_sql + ";")
         file.puts
         file.puts
@@ -118,15 +123,23 @@ module FixDBSchemaConflicts
     end
 
     def types_in_file(type_content)
-      type_file_path = Rails.root.join('db', 'types')
-      file_name = type_file_path.join("types.sql")
-      FileUtils.mkdir_p type_file_path unless type_file_path.exist?
-      File.open(file_name, "w") {}
+      file_name = Rails.root.join('db', 'others', "types.sql")
       File.open(file_name, 'a') do |file|
         type_content = type_content.gsub(/\n+/, "\n")
                                      .gsub(/^\s+/m, '')
                                      .strip
         formatted_sql = type_content.gsub(/(?=\b(AS|BEGIN|END|LANGUAGE|CREATE)\b)/, "\n")
+        file.write(formatted_sql + ";")
+        file.puts
+        file.puts
+      end
+    end
+
+    def extract_fts_configurations(fts_content)
+      file_name = Rails.root.join('db', 'others', "fts.sql")
+      File.open(file_name, 'a') do |file|
+        fts_content = fts_content.strip
+        formatted_sql = fts_content.gsub(/(?=\b(AS|BEGIN|END|LANGUAGE|CREATE)\b)/, "\n")
         file.write(formatted_sql + ";")
         file.puts
         file.puts

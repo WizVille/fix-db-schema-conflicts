@@ -11,12 +11,9 @@ module FixDBSchemaConflicts
     def triggers_creation(table_name, stream, *args)
       triggers = @connection.triggers(table_name)
       unless triggers.empty?
-        stream.puts("  execute <<-SQL")
-        triggers.each do |trigger|
-          stream.puts("#{trigger.definition} ;")
-          add_triggers_in_file(table_name, trigger.definition)
-        end
-        stream.puts("  SQL")
+        stream.puts("\ttrigger_file = Rails.root.join('db', 'triggers', \"#{table_name}.sql\")")
+        stream.puts("\tfile_content = File.read(trigger_file)")
+        stream.puts("\texecute file_content")
       end
     end
 
@@ -36,14 +33,18 @@ module FixDBSchemaConflicts
       file_path = triggers_path.join("#{file_name}.sql")
       File.open(file_path, "w") {}
       File.open(file_path, 'a') do |file|
-        trigger_content = trigger_content.gsub(/\n+/, "\n") # Remove extra blank lines
-                                         .gsub(/^\s+/m, '') # Trim leading spaces for each line
-                                         .strip # Remove leading/trailing blank lines
-        formatted_sql = trigger_content.gsub(/(?=\b(AFTER|FOR EACH ROW|WHEN|EXECUTE FUNCTION)\b)/, "\n")
+        formatted_sql = format_trigger(trigger_content)
         file.write(formatted_sql + ";")
         file.puts
         file.puts
       end
+    end
+
+    def format_trigger(trigger_content)
+      trigger_content = trigger_content.gsub(/\n+/, "\n") # Remove extra blank lines
+                                       .gsub(/^\s+/m, '') # Trim leading spaces for each line
+                                       .strip # Remove leading/trailing blank lines
+      trigger_content.gsub(/(?=\b(AFTER|BEFORE|FOR EACH ROW|WHEN|EXECUTE FUNCTION)\b)/, "\n")
     end
   end
 end
