@@ -49,7 +49,9 @@ module FixDBSchemaConflicts
       end
 
       def sanitize_trigger_definition(definition)
-        definition.gsub(/ON\s+(\w+\.)?(\w+\.)?/, 'ON ')
+        new_definition = definition.gsub(/ON\s+(\w+\.)?(\w+\.)?/, 'ON ')
+        new_definition.gsub!(/\bwizville\./, 'public.')
+        new_definition
       end
 
       def fts_configurations
