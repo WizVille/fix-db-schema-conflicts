@@ -82,5 +82,74 @@ module FixDBSchemaConflicts
         OpenStruct.new(schema: row['schema_name'], name: row['configuration_name'])
       end
     end
+
+    def aggregates
+      query = <<-SQL
+          SELECT
+              p.proname AS name,
+              format_type(a.aggtranstype, NULL) AS state_type,
+              (SELECT proname FROM pg_proc WHERE oid = a.aggtransfn) AS transition_function,
+              (SELECT proname FROM pg_proc WHERE oid = a.aggfinalfn) AS final_function,
+              (SELECT proname FROM pg_proc WHERE oid = a.aggcombinefn) AS combine_function,
+              (SELECT proname FROM pg_proc WHERE oid = a.aggserialfn) AS serialize_function,
+              (SELECT proname FROM pg_proc WHERE oid = a.aggdeserialfn) AS deserialize_function,
+              a.agginitval AS initial_value,
+              a.aggfinalmodify AS finalfunc_modify,
+              a.aggmfinalmodify AS mfinalfunc_modify,
+              a.aggkind AS aggregate_kind
+          FROM
+              pg_aggregate a
+          JOIN
+              pg_proc p ON a.aggfnoid = p.oid
+          JOIN
+              pg_namespace n ON p.pronamespace = n.oid
+          WHERE
+              n.nspname = 'wizville'
+          ORDER BY
+              p.proname;
+        SQL
+
+      @connection.execute(query).map do |row|
+        # Start building the SQL string dynamically
+        sql_parts = []
+        sql_parts << "CREATE AGGREGATE public.#{row['name']} (#{row['state_type']}) ("
+        sql_parts << "SFUNC = #{row['transition_function']}"
+        sql_parts << "STYPE = #{row['state_type']}"
+
+        # Add optional clauses only if valid
+        sql_parts << "FINALFUNC = #{row['final_function']}" unless row['final_function'] == "-"
+        sql_parts << "FINALFUNC_MODIFY = #{row['finalfunc_modify']}" if row['finalfunc_modify']
+        sql_parts << "MFINALFUNC_MODIFY = #{row['mfinalfunc_modify']}" if row['mfinalfunc_modify']
+        sql_parts << "COMBINEFUNC = #{row['combine_function']}" unless row['combine_function'] == "-"
+        sql_parts << "SERIALFUNC = #{row['serialize_function']}" unless row['serialize_function'] == "-"
+        sql_parts << "DESERIALFUNC = #{row['deserialize_function']}" unless row['deserialize_function'] == "-"
+        sql_parts << "INITCOND = '#{row['initial_value']}'" if row['initial_value']
+
+        # Close the SQL statement
+        sql_parts << ");"
+
+        # Join all parts into a single string
+        create_aggregate_sql = sql_parts.join("\n  ")
+
+        # Sanitize or validate the SQL if needed
+        sanitized_sql = sanitize_aggregate_definition(create_aggregate_sql)
+
+        OpenStruct.new(name: row['name'], definition: sanitized_sql)
+      end
+    end
+
+    def sanitize_aggregate_definition(sql)
+      # Remove invalid or empty clauses
+      sql = sql.gsub(/, FINALFUNC =\s*\w*/, '')
+               .gsub(/, FINALFUNC_MODIFY =\s*\w*/, '')
+               .gsub(/, MFINALFUNC_MODIFY =\s*\w*/, '')
+               .gsub(/, COMBINEFUNC =\s*\w*/, '')
+               .gsub(/, SERIALFUNC =\s*\w*/, '')
+               .gsub(/, DESERIALFUNC =\s*\w*/, '')
+
+      # Remove trailing commas and clean up the SQL
+      sql.gsub!(/,\s*\)/, ')')
+      sql.strip
+    end
   end
 end

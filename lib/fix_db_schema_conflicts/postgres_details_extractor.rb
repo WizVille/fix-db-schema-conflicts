@@ -7,12 +7,15 @@ module FixDBSchemaConflicts
       @pg_enum_types = @connection.fetch_enum_types
       @pg_functions = @connection.pg_functions
       @pg_fts_configurations = @connection.fts_configurations
+      @pg_aggregates = @connection.all_aggregates
       type_file_path = Rails.root.join('db', 'others')
       file_name = type_file_path.join("types.sql")
       FileUtils.mkdir_p type_file_path unless type_file_path.exist?
       File.open(file_name, "w") {}
       fts_file_path = Rails.root.join('db', 'others', 'fts.sql')
       File.open(fts_file_path, "w") {}
+      aggreagte_file_path = Rails.root.join('db', 'others', 'aggregates.sql')
+      File.open(aggreagte_file_path, "w") {}
     end
 
     def create_types(stream)
@@ -32,15 +35,29 @@ module FixDBSchemaConflicts
       stream.puts("\texecute file_content")
     end
 
+    def create_aggregates(stream)
+      return if @pg_aggregates.empty?
+
+      @pg_aggregates.each do |aggregate|
+        aggregates_in_file(aggregate.definition)
+      end
+      stream.puts("\taggregate_file = Rails.root.join('db', 'others', 'aggregates.sql')")
+      stream.puts("\taggregate_content = File.read(aggregate_file)")
+      stream.puts("\texecute aggregate_content")
+    end
+
     def create_functions(stream)
       @pg_functions.each do |row|
         function_content, function_name = extract_function_components(row)
-
-        stream.puts("\tfile = Rails.root.join('db', 'functions', \"#{function_name}.sql\")")
-        stream.puts("\tfile_content = File.read(file)")
-        stream.puts("\texecute file_content")
        functions_in_file(function_name, function_content)
       end
+
+      stream.puts("\tfunction_files_path = Rails.root.join('db', 'functions')")
+      stream.puts("\tsql_files = Dir.glob(File.join(function_files_path, '*.sql')).sort")
+      stream.puts("\tsql_files.sort.each do |file|")
+      stream.puts("\t    sql = File.read(file)")
+      stream.puts("\t    execute sql")
+      stream.puts("\tend")
     end
 
     def create_fts_configurations(stream)
@@ -53,9 +70,9 @@ module FixDBSchemaConflicts
                         "END $$;"
           extract_fts_configurations(sql_code)
         end
-        stream.puts("\tfile = Rails.root.join('db', 'others', 'fts.sql')")
-        stream.puts("\tfile_content = File.read(file)")
-        stream.puts("\texecute file_content")
+        stream.puts("\tfts_file = Rails.root.join('db', 'others', 'fts.sql')")
+        stream.puts("\tfts_content = File.read(fts_file)")
+        stream.puts("\texecute fts_content")
       end
     end
 
@@ -144,6 +161,45 @@ module FixDBSchemaConflicts
         file.puts
         file.puts
       end
+    end
+
+    def aggregates_in_file(aggregate_content)
+      file_name = Rails.root.join('db', 'others', "aggregates.sql")
+      File.open(file_name, 'a') do |file|
+        aggregate_content = sanitize_aggregate_definition(aggregate_content)
+        formatted_sql = aggregate_content.gsub(/(?=\b(AS|BEGIN|END|LANGUAGE|CREATE)\b)/, "\n")
+        file.write(formatted_sql + ";")
+        file.puts
+        file.puts
+      end
+    end
+
+    def sanitize_aggregate_definition(sql)
+      # Remove invalid or empty clauses completely
+      sql = sql.gsub(/,\s*FINALFUNC\s*=\s*[^,\)\n]*/, '')
+               .gsub(/,\s*FINALFUNC_MODIFY\s*=\s*[^,\)\n]*/, '')
+               .gsub(/,\s*MFINALFUNC_MODIFY\s*=\s*[^,\)\n]*/, '')
+               .gsub(/,\s*COMBINEFUNC\s*=\s*[^,\)\n]*/, '')
+               .gsub(/,\s*SERIALFUNC\s*=\s*[^,\)\n]*/, '')
+               .gsub(/,\s*DESERIALFUNC\s*=\s*[^,\)\n]*/, '')
+
+      # Remove dangling empty clauses
+      sql = sql.gsub(/\b(FINALFUNC|FINALFUNC_MODIFY|MFINALFUNC_MODIFY|COMBINEFUNC|SERIALFUNC|DESERIALFUNC)\s*=\s*[^,\)\n]*/, '')
+
+      # Add missing commas between SFUNC and STYPE
+      sql.gsub!(/(SFUNC\s*=\s*[^\s,]+)\s+(STYPE\s*=\s*[^\s,]+)/, '\1, \2')
+
+      # Remove trailing commas before closing parentheses
+      sql.gsub!(/,\s*\)/, ')')
+
+      # Remove unnecessary semicolons
+      sql.gsub!(/;;$/, ';')
+
+      # Ensure proper formatting by removing extra spaces
+      sql.gsub!(/\s{2,}/, ' ')  # Replace multiple spaces with a single space
+
+      # Final cleanup
+      sql.strip
     end
   end
 end

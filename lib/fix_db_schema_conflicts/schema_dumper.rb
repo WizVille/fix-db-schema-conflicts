@@ -57,6 +57,10 @@ module FixDBSchemaConflicts
       def fts_configurations
         @schema_info_extractor.fts_configurations
       end
+
+      def all_aggregates
+        @schema_info_extractor.aggregates
+      end
     end
 
     def extensions(*args)
@@ -76,11 +80,13 @@ module FixDBSchemaConflicts
         stream.puts("\t" + File.read(specific).gsub("\n", "\n\t") + "\n\n")
       end
 
+      aggreagates_fetched = false
       with_sorting do
         @details_operations = FixDBSchemaConflicts::PostgresDetailsExtractor.new(@connection)
         @details_operations.create_types(stream)
         @details_operations.create_functions(stream)
         @details_operations.create_fts_configurations(stream)
+        @details_operations.create_aggregates(stream) unless aggreagates_fetched
       end
       super(stream)
     end
@@ -105,6 +111,11 @@ module FixDBSchemaConflicts
       ensure
         @connection = old_connection
       end
+    end
+
+    def sanitize_aggregate_definition(definition)
+      # Sanitize or format the definition as needed
+      definition.strip
     end
   end
 end
