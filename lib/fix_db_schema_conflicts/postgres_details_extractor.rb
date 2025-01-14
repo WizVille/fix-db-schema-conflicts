@@ -8,14 +8,7 @@ module FixDBSchemaConflicts
       @pg_functions = @connection.pg_functions
       @pg_fts_configurations = @connection.fts_configurations
       @pg_aggregates = @connection.all_aggregates
-      type_file_path = Rails.root.join('db', 'others')
-      file_name = type_file_path.join("types.sql")
-      FileUtils.mkdir_p type_file_path unless type_file_path.exist?
-      File.open(file_name, "w") {}
-      fts_file_path = Rails.root.join('db', 'others', 'fts.sql')
-      File.open(fts_file_path, "w") {}
-      aggreagte_file_path = Rails.root.join('db', 'others', 'aggregates.sql')
-      File.open(aggreagte_file_path, "w") {}
+      files_verif_and_reset
     end
 
     def create_types(stream)
@@ -49,7 +42,7 @@ module FixDBSchemaConflicts
     def create_functions(stream)
       @pg_functions.each do |row|
         function_content, function_name = extract_function_components(row)
-       functions_in_file(function_name, function_content)
+        functions_in_file(function_name, function_content)
       end
 
       stream.puts("\tfunction_files_path = Rails.root.join('db', 'functions')")
@@ -77,6 +70,19 @@ module FixDBSchemaConflicts
     end
 
     private
+
+    def files_verif_and_reset
+      type_file_path = Rails.root.join('db', 'others')
+      file_name = type_file_path.join("types.sql")
+      FileUtils.mkdir_p type_file_path unless type_file_path.exist?
+      File.open(file_name, "w") {}
+      fts_file_path = Rails.root.join('db', 'others', 'fts.sql')
+      File.open(fts_file_path, "w") {}
+      aggreagte_file_path = Rails.root.join('db', 'others', 'aggregates.sql')
+      File.open(aggreagte_file_path, "w") {}
+      function_files = Rails.root.join('db', 'functions')
+      FileUtils.rm_rf(Dir.glob("#{function_files}/*")) if function_files.present?
+    end
 
     def extract_function_components(row)
       # Extract function components
@@ -123,11 +129,11 @@ module FixDBSchemaConflicts
       SQL
     end
 
-    def functions_in_file(file_name,function_content)
+    def functions_in_file(file_name, function_content)
       function_file_path = Rails.root.join('db', 'functions')
       file_name = function_file_path.join("#{file_name}.sql")
       FileUtils.mkdir_p function_file_path unless function_file_path.exist?
-      File.open(file_name, "w") {}
+      File.open(file_name, "w") {} unless File.exist?(file_name)
       File.open(file_name, 'a') do |file|
         function_content = function_content.gsub(/\n+/, "\n")
                                    .gsub(/^\s+/m, '')
