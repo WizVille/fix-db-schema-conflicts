@@ -85,8 +85,9 @@ module FixDBSchemaConflicts
 
     def aggregates
       query = <<-SQL
-          SELECT
-              p.proname AS name,
+          SELECT 
+              p.proname AS name, 
+              pg_get_function_identity_arguments(p.oid) AS argument_types,
               format_type(a.aggtranstype, NULL) AS state_type,
               (SELECT proname FROM pg_proc WHERE oid = a.aggtransfn) AS transition_function,
               (SELECT proname FROM pg_proc WHERE oid = a.aggfinalfn) AS final_function,
@@ -97,22 +98,21 @@ module FixDBSchemaConflicts
               a.aggfinalmodify AS finalfunc_modify,
               a.aggmfinalmodify AS mfinalfunc_modify,
               a.aggkind AS aggregate_kind
-          FROM
+          FROM 
               pg_aggregate a
-          JOIN
+          JOIN 
               pg_proc p ON a.aggfnoid = p.oid
-          JOIN
+          JOIN 
               pg_namespace n ON p.pronamespace = n.oid
-          WHERE
+          WHERE 
               n.nspname = 'wizville'
-          ORDER BY
+          ORDER BY 
               p.proname;
         SQL
 
       @connection.execute(query).map do |row|
-        # Start building the SQL string dynamically
         sql_parts = []
-        sql_parts << "CREATE AGGREGATE public.#{row['name']} (#{row['state_type']}) ("
+        sql_parts << "CREATE OR REPLACE AGGREGATE public.#{row['name']} (#{row['argument_types']}) ("
         sql_parts << "SFUNC = #{row['transition_function']}"
         sql_parts << "STYPE = #{row['state_type']}"
 
